@@ -97,15 +97,23 @@
         ctx.globalCompositeOperation = "source-over";
     }
 
-    const particleDrawPass = () => {
-        const temp = document.createElement("canvas");
-        temp.width = canvas.width;
-        temp.height = canvas.height;
-        
-        for(const particle of particles)
-            particle.display(temp, camera, displayParams, physicsParams);
+    // Reused every frame; allocating a full-screen canvas per frame churns the GC.
+    const particleLayer = document.createElement("canvas");
 
-        return temp;
+    const particleDrawPass = () => {
+        if(particleLayer.width !== canvas.width || particleLayer.height !== canvas.height) {
+            // Assigning either dimension also clears the canvas.
+            particleLayer.width = canvas.width;
+            particleLayer.height = canvas.height;
+        }
+        else {
+            particleLayer.getContext('2d')?.clearRect(0, 0, particleLayer.width, particleLayer.height);
+        }
+
+        for(const particle of particles)
+            particle.display(particleLayer, camera, displayParams, physicsParams);
+
+        return particleLayer;
     }
 
     const loop = () => {

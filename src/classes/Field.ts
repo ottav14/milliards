@@ -1,8 +1,6 @@
 import Camera from './Camera.ts';
 import { batchCircle } from '../util/Draw.ts';
 import Particle from './Particle.ts';
-import Red from './Red.ts';
-import Blue from './Blue.ts';
 import Vector2 from './Vector2.ts';
 
 const spacing = 20;
@@ -10,34 +8,22 @@ const radius = 1;
 const bendFactor = 20;
 const padding = 20;
 
-const getScreenSpace = (x: number, y: number, camera: Camera) => {
-    return new Vector2(
-        x * spacing + camera.x % spacing,
-        y * spacing + camera.y % spacing,
-    );
-}
+// The field is visualized by probing it with an electron's charge.
+const probeCharge = -1;
+
+// Reused across every grid sample so the render loop stays allocation-free.
+const sample = new Vector2();
 
 class Field {
     constructor() {}
 
-    sampleEMF(x: number, y: number, particles: Particle[], camera: Camera, physicsParams: Record<string, any>) {
-        const res = new Vector2();
-        const dummyParticle = new Blue(x - camera.x, y - camera.y);
-        for(const particle of particles) {
-            const EMF = particle.getElectromagneticForce(dummyParticle, physicsParams);
-            res.add(EMF);
-        }
-        return res;
-    }
-
-    sampleSNF(x: number, y: number, particles: Particle[], camera: Camera) {
-        const res = new Vector2();
-        const dummyParticle = new Red(x - camera.x, y - camera.y);
-        for(const particle of particles) {
-            const SNF = particle.getStrongNuclearForce(dummyParticle);
-            res.add(SNF);
-        }
-        return res;
+    sampleEMF(out: Vector2, x: number, y: number, particles: Particle[], camera: Camera, physicsParams: Record<string, any>) {
+        out.x = 0;
+        out.y = 0;
+        const worldX = x - camera.x;
+        const worldY = y - camera.y;
+        for(const particle of particles)
+            particle.addElectromagneticForceAt(out, worldX, worldY, probeCharge, physicsParams);
     }
 
     display(canvas: HTMLCanvasElement, camera: Camera, particles: Particle[], physicsParams: Record<string, any>) {
@@ -46,17 +32,20 @@ class Field {
 
         const resolutionX = canvas.width / spacing;
         const resolutionY = canvas.height / spacing;
+        const offsetX = camera.x % spacing;
+        const offsetY = camera.y % spacing;
 
         ctx.beginPath();
         for(let i = -padding; i < resolutionY+padding; i++) {
+            const y = i * spacing + offsetY;
             for(let j = -padding; j < resolutionX+padding; j++) {
-                const pos = getScreenSpace(j, i, camera);
-                const EMF = this.sampleEMF(pos.x, pos.y, particles, camera, physicsParams);
-                EMF.mult(bendFactor);
+                const x = j * spacing + offsetX;
+
+                this.sampleEMF(sample, x, y, particles, camera, physicsParams);
 
                 batchCircle(
-                    pos.x + EMF.x,
-                    pos.y + EMF.y,
+                    x + sample.x * bendFactor,
+                    y + sample.y * bendFactor,
                     radius,
                     ctx
                 );

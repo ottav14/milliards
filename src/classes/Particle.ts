@@ -98,16 +98,28 @@ class Particle {
         }
     }
 
+    // Accumulates this particle's electromagnetic force on a probe of the given
+    // charge at (x, y) into `out`. Takes raw coordinates rather than a Particle so
+    // the field visualization can sample it without allocating a dummy particle.
+    addElectromagneticForceAt(out: Vector2, x: number, y: number, charge: number, physicsParams: Record<string, any>) {
+        const dx = x - this.pos.x;
+        const dy = y - this.pos.y;
+        const distance = Math.sqrt(dx*dx + dy*dy) - this.m;
+        const range = physicsParams['electromagneticRange'];
+        if(distance >= range) return; // smoothstep would mask this to zero
+
+        const chargeInteraction = computeChargeInteraction(this.electromagneticCharge, charge);
+        if(chargeInteraction == 0) return;
+
+        const scale = smoothstep(range, 0, distance) * chargeInteraction * physicsParams['electromagneticStrength'];
+        out.x += dx * scale;
+        out.y += dy * scale;
+    }
+
     getElectromagneticForce(particle: Particle, physicsParams: Record<string, any>) {
         const force = new Vector2();
-        if(particle !== this) {
-            const dir = VECTOR2.sub(particle.pos, this.pos);
-            const distance = dir.mag() - this.m;
-            const distanceMask = smoothstep(physicsParams['electromagneticRange'], 0, distance);
-            const chargeInteraction = computeChargeInteraction(this.electromagneticCharge, particle.electromagneticCharge);
-            dir.mult(distanceMask * chargeInteraction * physicsParams['electromagneticStrength']);
-            force.add(dir);
-        }
+        if(particle !== this)
+            this.addElectromagneticForceAt(force, particle.pos.x, particle.pos.y, particle.electromagneticCharge, physicsParams);
         return force;
     }
 
